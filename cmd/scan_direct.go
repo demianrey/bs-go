@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -109,20 +110,49 @@ func scanDirect(c *queuescanner.Ctx, p *queuescanner.QueueScannerScanParams) {
 
 	isHiddenCloudflare := slices.Contains(req.ServerList, "cloudflare") && hCfRay != "" && hServerLower != "cloudflare"
 
-	if slices.Contains(req.ServerList, hServerLower) || isHiddenCloudflare {
+	// Limpiar el nombre del servidor eliminando paréntesis y lo que esté entre ellos
+	re := regexp.MustCompile(`\s*\(.*?\)|-.+`) // RegExp para eliminar paréntesis y su contenido
+	hServerClean := re.ReplaceAllString(hServerLower, "")
+
+	// Tomar solo la parte antes de cualquier espacio
+	hServerClean = strings.Split(hServerClean, " ")[0]
+
+	// Aquí agrupamos los valores como "EDGIO"
+	if hServerClean == "ecs" || hServerClean == "ecsf" || hServerClean == "ecacc" || hServerClean == "eclf" {
+		hServerClean = "edgio"
+		hServer = "EDGIO" // Cambiar el nombre del servidor mostrado
+	}
+
+	if hServerClean == "bunnycdn" {
+		hServer = "BunnyCDN" // Cambiar el nombre del servidor mostrado
+	}
+
+	if hServerClean == "varnish" {
+		hServer = "Fastly" // Cambiar el nombre del servidor mostrado
+	}
+
+	if slices.Contains(req.ServerList, hServerClean) || isHiddenCloudflare {
 		if isHiddenCloudflare {
 			resColor = colorG1
 			hServer = fmt.Sprintf("%s (cf)", hServer)
 		} else {
-			switch hServerLower {
+			// Usar un switch para asignar colores según el servidor limpio
+			switch hServerClean {
 			case "cloudflare":
 				resColor = colorG1
 			case "akamaighost":
 				resColor = colorY1
 			case "cloudfront":
 				resColor = colorC1
+			case "edgio":
+				resColor = colorR1
+			case "bunnycdn":
+				resColor = colorBl1
+			case "varnish":
+				resColor = colorM1
 			default:
-				resColor = colorW1
+				resColor = colorW1 // Color por defecto para servidores no listados
+
 			}
 			if len(req.ServerList) == 1 {
 				resColor = colorG1
@@ -182,6 +212,9 @@ func scanDirectRun(cmd *cobra.Command, args []string) {
 			"cloudflare",
 			"cloudfront",
 			"akamaighost",
+			"edgio",
+			"bunnycdn",
+			"varnish",
 		}
 	} else {
 		serverList = strings.Split(scanDirectFlagServerListLower, ",")
