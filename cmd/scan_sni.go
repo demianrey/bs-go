@@ -12,7 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/aztecrabbit/bugscanner-go/pkg/queuescanner"
+	"github.com/demianrey/bs-go/pkg/queuescanner"
 )
 
 var sniCmd = &cobra.Command{
