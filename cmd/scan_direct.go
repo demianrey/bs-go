@@ -15,6 +15,7 @@ import (
 
 	"github.com/demianrey/bs-go/pkg/queuescanner"
 	"github.com/fatih/color"
+	"github.com/projectdiscovery/cdncheck"
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +33,7 @@ var (
 	scanDirectFlagTimeout    int
 	scanDirectFlagOutput     string
 	scanDirectFlagCidr       string
+	scanDirectFlagCheckCdn   bool
 )
 
 func init() {
@@ -43,6 +45,7 @@ func init() {
 	scanDirectCmd.Flags().IntVar(&scanDirectFlagTimeout, "timeout", 3, "connect timeout")
 	scanDirectCmd.Flags().StringVarP(&scanDirectFlagOutput, "output", "o", "", "output result")
 	scanDirectCmd.Flags().StringVarP(&scanDirectFlagCidr, "cidr", "c", "", "cidr to scan e.g. 127.0.0.1/32")
+	scanDirectCmd.Flags().BoolVar(&scanDirectFlagCheckCdn, "cdn", false, "check if the domain belongs to a CDN")
 
 	scanDirectCmd.MarkFlagFilename("filename")
 	//scanDirectCmd.MarkFlagRequired("filename")
@@ -118,6 +121,16 @@ func scanDirect(c *queuescanner.Ctx, p *queuescanner.QueueScannerScanParams) {
 
 	// Tomar solo la parte antes de cualquier espacio
 	hServerClean = strings.Split(hServerClean, " ")[0]
+
+	// Nueva lógica para verificar CDN usando cdncheck
+	if scanDirectFlagCheckCdn {
+		cdnClient := cdncheck.New()
+		matched, value, itemType, err := cdnClient.Check(net.ParseIP(ip))
+		if err == nil && matched {
+			hServer = "CDN: " + value + itemType // Usar el nombre del CDN devuelto por el valor 'value'
+			resColor = colorBl1                  // Cambiar el color según el CDN detectado
+		}
+	}
 
 	// Aquí agrupamos los valores como "EDGIO"
 	if hServerClean == "ecs" || hServerClean == "ecsf" || hServerClean == "ecacc" || hServerClean == "eclf" {
