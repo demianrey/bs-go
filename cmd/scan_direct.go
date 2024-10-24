@@ -209,7 +209,7 @@ func scanDirectRun(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Si se proporciona un CIDR, generar la lista de dominios desde el CIDR
+	// Si se proporciona un CIDR directamente, generar la lista de dominios desde el CIDR
 	if scanDirectFlagCidr != "" {
 		HostListFromCidr, err := ipListFromCidr(scanDirectFlagCidr)
 		if err != nil {
@@ -223,7 +223,7 @@ func scanDirectRun(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Si se proporciona un archivo de lista de dominios, procesarlo
+	// Si se proporciona un archivo de lista de dominios o CIDRs, procesarlo
 	if scanDirectFlagFilename != "" {
 		domainListFile, err := os.Open(scanDirectFlagFilename)
 		if err != nil {
@@ -232,11 +232,27 @@ func scanDirectRun(cmd *cobra.Command, args []string) {
 		}
 		defer domainListFile.Close()
 
-		// Leer cada línea del archivo y añadir el dominio a la lista
+		// Leer cada línea del archivo y determinar si es un CIDR o un dominio
 		scanner := bufio.NewScanner(domainListFile)
 		for scanner.Scan() {
-			domain := scanner.Text()
-			domainList[domain] = true
+			line := scanner.Text()
+
+			// Verificar si es un CIDR
+			if strings.Contains(line, "/") {
+				HostListFromCidr, err := ipListFromCidr(line)
+				if err != nil {
+					fmt.Printf("Error al convertir CIDR %s: %s\n", line, err.Error())
+					continue
+				}
+
+				// Añadir dominios generados desde el CIDR a la lista
+				for _, domain := range HostListFromCidr {
+					domainList[domain] = true
+				}
+			} else {
+				// Si es un dominio, agregarlo a la lista directamente
+				domainList[line] = true
+			}
 		}
 	}
 
@@ -319,9 +335,9 @@ func scanDirectRun(cmd *cobra.Command, args []string) {
 			c.Log(resColor.Sprintf("\n%s\n", server))
 
 			domainList = append(domainList, fmt.Sprintf("# %s", server))
-			for doamin := range mapDomainList {
-				domainList = append(domainList, doamin)
-				c.Log(resColor.Sprint(doamin))
+			for domain := range mapDomainList {
+				domainList = append(domainList, domain)
+				c.Log(resColor.Sprint(domain))
 			}
 			domainList = append(domainList, "")
 			c.Log("")
