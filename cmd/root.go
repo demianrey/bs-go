@@ -13,8 +13,8 @@ var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "bugscanner-go",
-	Short: "This tool is dedicated to DARKTUNNEL.NET, please support us if you find this tool useful.",
+	Use:   "bs-go",
+	Short: "DemianRed",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -47,6 +47,7 @@ var (
 	colorR1  = color.New(color.FgRed, color.Bold)
 	colorBl1 = color.New(color.FgBlue, color.Bold)
 	colorM1  = color.New(color.FgHiMagenta, color.Bold)
+	colorBl2 = color.New(color.BgHiBlue, color.Bold)
 )
 
 // initConfig reads in config file and ENV variables if set.

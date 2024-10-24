@@ -31,6 +31,7 @@ var (
 	scanDirectFlagHttps      bool
 	scanDirectFlagTimeout    int
 	scanDirectFlagOutput     string
+	scanDirectFlagCidr       string
 )
 
 func init() {
@@ -41,9 +42,10 @@ func init() {
 	scanDirectCmd.Flags().BoolVar(&scanDirectFlagHttps, "https", false, "use https")
 	scanDirectCmd.Flags().IntVar(&scanDirectFlagTimeout, "timeout", 3, "connect timeout")
 	scanDirectCmd.Flags().StringVarP(&scanDirectFlagOutput, "output", "o", "", "output result")
+	scanDirectCmd.Flags().StringVarP(&scanDirectFlagCidr, "cidr", "c", "", "cidr to scan e.g. 127.0.0.1/32")
 
 	scanDirectCmd.MarkFlagFilename("filename")
-	scanDirectCmd.MarkFlagRequired("filename")
+	//scanDirectCmd.MarkFlagRequired("filename")
 }
 
 type scanDirectRequest struct {
@@ -131,6 +133,10 @@ func scanDirect(c *queuescanner.Ctx, p *queuescanner.QueueScannerScanParams) {
 		hServer = "Fastly" // Cambiar el nombre del servidor mostrado
 	}
 
+	if hServerClean == "uploadserver" {
+		hServer = "Google" // Cambiar el nombre del servidor mostrado
+	}
+
 	if slices.Contains(req.ServerList, hServerClean) || isHiddenCloudflare {
 		if isHiddenCloudflare {
 			resColor = colorG1
@@ -150,6 +156,8 @@ func scanDirect(c *queuescanner.Ctx, p *queuescanner.QueueScannerScanParams) {
 				resColor = colorBl1
 			case "varnish":
 				resColor = colorM1
+			case "uploadserver":
+				resColor = colorBl2
 			default:
 				resColor = colorW1 // Color por defecto para servidores no listados
 
@@ -190,21 +198,50 @@ func scanDirect(c *queuescanner.Ctx, p *queuescanner.QueueScannerScanParams) {
 func scanDirectRun(cmd *cobra.Command, args []string) {
 	domainList := make(map[string]bool)
 
-	domainListFile, err := os.Open(scanDirectFlagFilename)
-	if err != nil {
-		fmt.Println(err.Error())
+	// Validar que se haya proporcionado al menos filename o cidr, pero no ambos
+	if scanDirectFlagFilename == "" && scanDirectFlagCidr == "" {
+		fmt.Println("Error: Se requiere proporcionar --filename o --cidr")
 		os.Exit(1)
 	}
-	defer domainListFile.Close()
 
-	scanner := bufio.NewScanner(domainListFile)
-	for scanner.Scan() {
-		domain := scanner.Text()
-		domainList[domain] = true
+	if scanDirectFlagFilename != "" && scanDirectFlagCidr != "" {
+		fmt.Println("Error: Solo puede proporcionar --filename o --cidr, no ambos")
+		os.Exit(1)
 	}
 
-	var serverList []string
+	// Si se proporciona un CIDR, generar la lista de dominios desde el CIDR
+	if scanDirectFlagCidr != "" {
+		HostListFromCidr, err := ipListFromCidr(scanDirectFlagCidr)
+		if err != nil {
+			fmt.Printf("Converting IP list from CIDR error: %s\n", err.Error())
+			os.Exit(1)
+		}
 
+		// Añadir dominios generados desde el CIDR a la lista
+		for _, domain := range HostListFromCidr {
+			domainList[domain] = true
+		}
+	}
+
+	// Si se proporciona un archivo de lista de dominios, procesarlo
+	if scanDirectFlagFilename != "" {
+		domainListFile, err := os.Open(scanDirectFlagFilename)
+		if err != nil {
+			fmt.Println(err.Error())
+			os.Exit(1)
+		}
+		defer domainListFile.Close()
+
+		// Leer cada línea del archivo y añadir el dominio a la lista
+		scanner := bufio.NewScanner(domainListFile)
+		for scanner.Scan() {
+			domain := scanner.Text()
+			domainList[domain] = true
+		}
+	}
+
+	// Configurar la lista de servidores
+	var serverList []string
 	scanDirectFlagServerListLower := strings.ToLower(scanDirectFlagServerList)
 
 	if scanDirectFlagServerListLower == "all" {
@@ -215,13 +252,13 @@ func scanDirectRun(cmd *cobra.Command, args []string) {
 			"edgio",
 			"bunnycdn",
 			"varnish",
+			"uploadserver",
 		}
 	} else {
 		serverList = strings.Split(scanDirectFlagServerListLower, ",")
 	}
 
-	//
-
+	// Crear el QueueScanner y añadir las tareas de escaneo
 	queueScanner := queuescanner.NewQueueScanner(scanFlagThreads, scanDirect)
 	for domain := range domainList {
 		queueScanner.Add(&queuescanner.QueueScannerScanParams{
@@ -233,6 +270,8 @@ func scanDirectRun(cmd *cobra.Command, args []string) {
 			},
 		})
 	}
+
+	// Iniciar el escaneo y generar el reporte
 	queueScanner.Start(func(c *queuescanner.Ctx) {
 		if len(c.ScanSuccessList) == 0 {
 			return
